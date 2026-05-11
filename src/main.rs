@@ -39,7 +39,7 @@ fn search(query: &str) -> io::Result<()> {
     let mut string_found = false;
     let querylowercase = query.to_lowercase();
 
-    for entry in fs::read_dir(directory)? {
+    for (index, entry) in fs::read_dir(directory)?.enumerate() {
         let entry = entry?;
         let path = entry.path();
         let file = File::open(&path)?;
@@ -51,7 +51,7 @@ fn search(query: &str) -> io::Result<()> {
 
             if lowercase_line.contains(&querylowercase) {
                 string_found = true;
-                println!("found : {}", line)
+                println!("{} | {} | {}", index + 1, path.display(), line)
             }
         }
     }
@@ -76,14 +76,12 @@ fn add(query: &str) -> io::Result<()> {
         .create(true)
         .append(true)
         .open(format!("Notes/{}", filename))?;
-    writeln!(file, "{}", query)?;
-    writeln!(file)?;
+    write!(file, "{}", query)?;
     Ok(())
 }
 
 fn list() -> io::Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
-    entries.reverse();
+    let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
     for (index, entry) in entries.iter().enumerate() {
         let path = entry.path();
 
@@ -97,11 +95,12 @@ fn list() -> io::Result<()> {
 fn delete(index: usize) -> std::io::Result<()> {
     let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
     for (i, entry) in entries.iter().enumerate() {
-        if i == index {
+        if i + 1 == index {
             fs::remove_file(entry.path())?;
             break;
         }
     }
+    println!("{:?} ", entries.iter().enumerate());
     Ok(())
 }
 fn encrypt(index: usize) -> io::Result<()> {
