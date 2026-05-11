@@ -1,3 +1,3 @@
 # Notes
 
-A simple note taking CLI
+A note taking CLI

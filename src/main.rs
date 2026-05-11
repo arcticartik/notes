@@ -19,7 +19,7 @@ struct Args {
 #[derive(Subcommand)]
 enum Commands {
     /// Search for a note
-    Search { query: String, file: String },
+    Search { query: String },
     /// Make a new note
     Add { query: String },
     /// Init a Notes folder
@@ -34,23 +34,29 @@ enum Commands {
     Decrypt { index: usize },
 }
 
-fn search(file: &str, query: &str) -> io::Result<()> {
-    let file = File::open(file)?;
-    let reader = BufReader::new(file);
+fn search(query: &str) -> io::Result<()> {
+    let directory = Path::new("Notes");
     let mut string_found = false;
     let querylowercase = query.to_lowercase();
 
-    for line in reader.lines() {
-        let line = line?;
-        let finish = line.to_lowercase();
+    for entry in fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        let file = File::open(&path)?;
+        let reader = BufReader::new(file);
 
-        if line.to_lowercase().contains(&querylowercase) {
-            string_found = true;
-            println!("string found '{}'", finish);
+        for line in reader.lines() {
+            let line = line?;
+            let lowercase_line = line.to_lowercase();
+
+            if lowercase_line.contains(&querylowercase) {
+                string_found = true;
+                println!("found : {}", line)
+            }
         }
     }
     if !string_found {
-        println!("String is not present");
+        println!("String '{}' not present", query);
     }
     Ok(())
 }
@@ -149,7 +155,7 @@ fn main() -> io::Result<()> {
     let args = Args::parse();
 
     match args.command {
-        Commands::Search { query, file } => search(&file, &query)?,
+        Commands::Search { query } => search(&query)?,
         Commands::Add { query } => add(&query)?,
         Commands::Init => init()?,
         Commands::List => list()?,
