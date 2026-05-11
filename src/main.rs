@@ -34,6 +34,14 @@ enum Commands {
     Decrypt { index: usize },
 }
 
+fn is_encrypted(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()) == Some("enc")
+}
+
+fn read_entries() -> io::Result<Vec<fs::DirEntry>> {
+    Ok(fs::read_dir("Notes")?.filter_map(Result::ok).collect())
+}
+
 fn search(query: &str) -> io::Result<()> {
     let directory = Path::new("Notes");
     let mut string_found = false;
@@ -45,13 +53,18 @@ fn search(query: &str) -> io::Result<()> {
         let file = File::open(&path)?;
         let reader = BufReader::new(file);
 
-        for line in reader.lines() {
-            let line = line?;
-            let lowercase_line = line.to_lowercase();
+        if is_encrypted(&path) {
+            continue;
+        } else {
+            for line in reader.lines() {
+                let line = line?;
+                let lowercase_line = line.to_lowercase();
 
-            if lowercase_line.contains(&querylowercase) {
-                string_found = true;
-                println!("{} | {} | {}", index + 1, path.display(), line)
+                if lowercase_line.contains(&querylowercase) {
+                    string_found = true;
+                    let contents = fs::read_to_string(&path)?;
+                    println!("{} | {} | {}", index + 1, path.display(), contents);
+                }
             }
         }
     }
@@ -81,11 +94,13 @@ fn add(query: &str) -> io::Result<()> {
 }
 
 fn list() -> io::Result<()> {
-    let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
+    let entries = read_entries()?;
     for (index, entry) in entries.iter().enumerate() {
         let path = entry.path();
 
-        if path.is_file() {
+        if is_encrypted(&path) {
+            println!("{} | {} | ENCRYPTED", index + 1, path.display());
+        } else {
             let contents = fs::read_to_string(&path)?;
             println!("{} | {} | {}", index + 1, path.display(), contents);
         }
@@ -93,21 +108,20 @@ fn list() -> io::Result<()> {
     Ok(())
 }
 fn delete(index: usize) -> std::io::Result<()> {
-    let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
+    let entries = read_entries()?;
     for (i, entry) in entries.iter().enumerate() {
         if i + 1 == index {
             fs::remove_file(entry.path())?;
             break;
         }
     }
-    println!("{:?} ", entries.iter().enumerate());
     Ok(())
 }
 fn encrypt(index: usize) -> io::Result<()> {
     let key = b"k";
     let shift = 3;
-    let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
-    if let Some(entry) = entries.get(index) {
+    let entries = read_entries()?;
+    if let Some(entry) = entries.get(index - 1) {
         let path = entry.path();
         let data = fs::read(&path)?;
 
@@ -118,7 +132,7 @@ fn encrypt(index: usize) -> io::Result<()> {
             .collect();
         let enc_path = path.with_extension("enc");
 
-        if path.extension().and_then(|ext| ext.to_str()) != Some("enc") {
+        if !is_encrypted(&path) {
             fs::remove_file(path)?;
             fs::write(&enc_path, &out)?;
         }
@@ -128,8 +142,8 @@ fn encrypt(index: usize) -> io::Result<()> {
 fn decrypt(index: usize) -> io::Result<()> {
     let key = b"k";
     let shift = 3;
-    let entries: Vec<_> = std::fs::read_dir("Notes")?.filter_map(Result::ok).collect();
-    if let Some(entry) = entries.get(index) {
+    let entries = read_entries()?;
+    if let Some(entry) = entries.get(index - 1) {
         let path = entry.path();
         let data = fs::read(&path)?;
 
@@ -143,7 +157,7 @@ fn decrypt(index: usize) -> io::Result<()> {
             .collect();
         let dec_path = path.with_extension("txt");
 
-        if path.extension().and_then(|ext| ext.to_str()) != Some("txt") {
+        if is_encrypted(&path) {
             fs::remove_file(path)?;
             fs::write(dec_path, &out)?;
         }
