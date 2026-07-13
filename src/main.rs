@@ -28,44 +28,59 @@ enum Commands {
     List,
     /// Delete a note by index
     Delete { index: usize },
-    /// Encrypt a note by index
-    Encrypt { index: usize },
-    /// Decrypt a note by index
-    Decrypt { index: usize },
+    /// Obfuscate a note by index
+    Obfuscate { index: usize },
+    /// Deobfuscate a note by index
+    Deobfuscate { index: usize },
+    /// Deletes all notes
+    DeleteAll,
 }
 
-fn is_encrypted(path: &Path) -> bool {
+fn is_obfuscated(path: &Path) -> bool {
     path.extension().and_then(|e| e.to_str()) == Some("enc")
 }
 
 fn read_entries() -> io::Result<Vec<fs::DirEntry>> {
-    Ok(fs::read_dir("Notes")?.filter_map(Result::ok).collect())
+    let mut entries = Vec::new();
+    for entry in fs::read_dir("Notes")? {
+        match entry {
+            Ok(x) => entries.push(x),
+            Err(x) => {
+                eprintln!("Entry {} not readable", x)
+            }
+        }
+    }
+    entries.sort_by_key(|entry| entry.path());
+    Ok(entries)
 }
 
 fn search(query: &str) -> io::Result<()> {
-    let directory = Path::new("Notes");
     let mut string_found = false;
-    let querylowercase = query.to_lowercase();
+    let query_lowercase = query.to_lowercase();
+    let entries = read_entries()?;
 
-    for (index, entry) in fs::read_dir(directory)?.enumerate() {
-        let entry = entry?;
+    for (index, entry) in entries.iter().enumerate() {
         let path = entry.path();
         let file = File::open(&path)?;
         let reader = BufReader::new(file);
 
-        if is_encrypted(&path) {
+        if is_obfuscated(&path) {
             continue;
-        } else {
-            for line in reader.lines() {
-                let line = line?;
-                let lowercase_line = line.to_lowercase();
+        }
+        let mut matched = false;
+        for line in reader.lines() {
+            let line = line?;
+            let lowercase_line = line.to_lowercase();
 
-                if lowercase_line.contains(&querylowercase) {
-                    string_found = true;
-                    let contents = fs::read_to_string(&path)?;
-                    println!("{} | {} | {}", index + 1, path.display(), contents);
-                }
+            if lowercase_line.contains(&query_lowercase) {
+                matched = true;
+                string_found = true;
             }
+        }
+        if matched {
+            let contents = fs::read_to_string(&path)?;
+
+            println!("{} | {} | {}", index + 1, path.display(), contents);
         }
     }
     if !string_found {
@@ -92,18 +107,24 @@ fn add(query: &str) -> io::Result<()> {
     write!(file, "{}", query)?;
     Ok(())
 }
-
 fn list() -> io::Result<()> {
     let entries = read_entries()?;
     for (index, entry) in entries.iter().enumerate() {
         let path = entry.path();
 
-        if is_encrypted(&path) {
-            println!("{} | {} | ENCRYPTED", index + 1, path.display());
+        if is_obfuscated(&path) {
+            println!("{} | {} | OBFUSCATED", index + 1, path.display());
         } else {
             let contents = fs::read_to_string(&path)?;
             println!("{} | {} | {}", index + 1, path.display(), contents);
         }
+    }
+    Ok(())
+}
+fn delete_all() -> std::io::Result<()> {
+    let entries = read_entries()?;
+    for entry in entries {
+        fs::remove_file(entry.path())?;
     }
     Ok(())
 }
@@ -117,7 +138,7 @@ fn delete(index: usize) -> std::io::Result<()> {
     }
     Ok(())
 }
-fn encrypt(index: usize) -> io::Result<()> {
+fn obfuscate(index: usize) -> io::Result<()> {
     let key = b"k";
     let shift = 3;
     let entries = read_entries()?;
@@ -132,14 +153,14 @@ fn encrypt(index: usize) -> io::Result<()> {
             .collect();
         let enc_path = path.with_extension("enc");
 
-        if !is_encrypted(&path) {
+        if !is_obfuscated(&path) {
             fs::remove_file(path)?;
             fs::write(&enc_path, &out)?;
         }
     }
     Ok(())
 }
-fn decrypt(index: usize) -> io::Result<()> {
+fn deobfuscate(index: usize) -> io::Result<()> {
     let key = b"k";
     let shift = 3;
     let entries = read_entries()?;
@@ -157,24 +178,25 @@ fn decrypt(index: usize) -> io::Result<()> {
             .collect();
         let dec_path = path.with_extension("txt");
 
-        if is_encrypted(&path) {
+        if is_obfuscated(&path) {
             fs::remove_file(path)?;
             fs::write(dec_path, &out)?;
         }
     }
     Ok(())
 }
+
 fn main() -> io::Result<()> {
     let args = Args::parse();
-
     match args.command {
         Commands::Search { query } => search(&query)?,
         Commands::Add { query } => add(&query)?,
         Commands::Init => init()?,
         Commands::List => list()?,
         Commands::Delete { index } => delete(index)?,
-        Commands::Decrypt { index } => decrypt(index)?,
-        Commands::Encrypt { index } => encrypt(index)?,
+        Commands::Obfuscate { index } => obfuscate(index)?,
+        Commands::Deobfuscate { index } => deobfuscate(index)?,
+        Commands::DeleteAll => delete_all()?,
     }
 
     Ok(())
